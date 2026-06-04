@@ -1,0 +1,60 @@
+name: QA Agent — Playwright Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_path:
+        description: 'Test file or folder to run'
+        required: false
+        default: ''
+      base_url:
+        description: 'Application base URL'
+        required: false
+        default: ''
+
+jobs:
+  test:
+    name: Run Playwright Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: qa-tests
+        run: |
+                    npm install --save-dev @playwright/test dotenv
+          npx playwright install --with-deps chromium
+
+      - name: Run tests
+        working-directory: qa-tests
+        env:
+          BASE_URL:   ${{ inputs.base_url || secrets.BASE_URL || 'http://localhost:3000' }}
+          TEST_USER:  ${{ secrets.TEST_USER }}
+          TEST_PASS:  ${{ secrets.TEST_PASS }}
+          PW_TIMEOUT: '15000'
+          CI:         'true'
+        run: |
+                    TEST_ARG="${{ inputs.test_path }}"
+          if [ -n "$TEST_ARG" ]; then
+            npx playwright test "$TEST_ARG" --reporter=json,html || true
+          else
+            npx playwright test --reporter=json,html || true
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            qa-tests/playwright-report/
+            qa-tests/test-results/
+          retention-days: 7
